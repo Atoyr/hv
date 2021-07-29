@@ -4,6 +4,7 @@ using System.Security.Principal;
 using System.Security.Permissions;
 using System.Management.Automation;
 using Medoz.CommandLine;
+using hv.Models;
 
 namespace hv
 {
@@ -11,15 +12,6 @@ namespace hv
     {
         static void Main(string[] args)
         {
-          Thread.GetDomain().SetPrincipalPolicy(PrincipalPolicy.WindowsPrincipal);
-          var pri = (WindowsPrincipal)Thread.CurrentPrincipal;
-
-          // if (!pri.IsInRole(WindowsBuiltInRole.Administrator))
-          // {
-          //   Console.WriteLine("管理者権限で起動してください");
-          //   return;
-          // }
-
           var app = Cli.NewApp();
           app.Authors.Add("r.uchiyama");
           app.Usage = "Hyper-V Command Tools";
@@ -30,8 +22,18 @@ namespace hv
           outputOption.Usage = "Choose Output format.";
           outputOption.SetDefaultValue("json");
 
-          app.Flags.Add(outputOption);
+          var serverOption = new StringFlag("server");
+          serverOption.Alias = new string[]{"svr", "s"};
+          serverOption.Usage = "Choose Execute Server";
+          serverOption.SetDefaultValue("");
+
+          var loggerOption = new BoolFlag("logger");
+          loggerOption.Usage = "Use Logger";
+          loggerOption.SetDefaultValue(false);
             
+          app.Flags.Add(outputOption);
+          app.Flags.Add(serverOption);
+          app.Flags.Add(loggerOption);
 #region vm command
           // vm command
           var vmCommand = new Command("vm");
@@ -39,9 +41,29 @@ namespace hv
 
           var vm_ListCommand = new Command("list");
           vm_ListCommand.Action = (ctx) => {
+
             using(var p = PowerShellProcess.Default("Get-VM"))
             {
-              Console.WriteLine(p.Execute());
+              var useLogger = ctx.Bool("logger");
+              if (useLogger)
+              {
+                p.SetLogger(Logger.Default());
+              }
+
+              string result = string.Empty;
+              switch(Output.GetOutputs(ctx.String("output")))
+              {
+                case Outputs.json:
+                    result = p.ExecuteToJson();
+                    break;
+                case Outputs.table:
+                    result = p.Execute();
+                    break;
+                default:
+                    break;
+              }
+
+              Console.WriteLine(result);
             }
           };
 
@@ -50,7 +72,7 @@ namespace hv
           nameOption.Alias = new string[]{"n"};
           nameOption.Usage = "The name of the Virtual Machine.";
           vm_StartCommand.Flags.Add(nameOption);
-          vm_ListCommand.Action = (ctx) => {
+          vm_StartCommand.Action = (ctx) => {
             using(var p = PowerShellProcess.Default("Get-VM"))
             {
               Console.WriteLine(p.Execute());

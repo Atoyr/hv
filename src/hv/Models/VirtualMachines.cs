@@ -71,7 +71,7 @@ namespace hv.Models
         public IntegrationServicesVersion IntegrationServicesVersion { get; set; }
 
         [JsonProperty("Uptime")]
-        public DateTime Uptime { get; set; }
+        public Dictionary<string, double> Uptime { get; set; }
 
         [JsonProperty("OperationalStatus")]
         public long[] OperationalStatus { get; set; }

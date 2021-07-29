@@ -12,9 +12,10 @@ namespace hv
       private StringBuilder stringBuilder;
       private string guid { set; get; }
       private Process process { set; get; }
+      private ILogger logger { set; get; }
 
       public string ApplicationName { set; get; } = Path.GetFileNameWithoutExtension(Process.GetCurrentProcess().MainModule.FileName);
-      public bool OutputLogs { set; get; } = false;
+      public string RemoteServer { set; get; }
       
       public static PowerShellProcess Default(string value) => new PowerShellProcess(value);
       public static PowerShellProcess Empty() => new PowerShellProcess();
@@ -42,6 +43,7 @@ namespace hv
           if (!string.IsNullOrEmpty(appPath) && File.Exists(Path.Combine(appPath, guid)))
           {
             File.Delete(Path.Combine(appPath, guid));
+            logger?.Info($"File deleted at {Path.Combine(appPath, guid)}");
           }
         }
       }
@@ -64,7 +66,7 @@ namespace hv
             psi.Arguments = args;
             return psi;
       }
-      
+
       public PowerShellProcess AddCommand(string command)
       {
         stringBuilder.Append(command).Append(" ");
@@ -95,6 +97,7 @@ namespace hv
         return this;
       }
 
+
       private string FormatParameters(params string[] parameters)
       {
         StringBuilder sb = new StringBuilder();
@@ -124,33 +127,55 @@ namespace hv
 
       public string Execute()
       {
+        logger?.Info("Call Execute");
         guid = Guid.NewGuid().ToString();
+        logger?.Info($"Generate Guid [{guid}]");
         string appPath = Config.CreateAppFolderIfNotExists(ApplicationName);
         string filePath = Path.Combine(appPath, guid);
+        logger?.Info(BuildCommand(PipeOutFileCommand(filePath)));
         process = Process.Start(GetProcessStartInfo(BuildCommand(PipeOutFileCommand(filePath))));
         process.WaitForExit();
         process.Close();
 
         string[] lines = System.IO.File.ReadAllLines(Path.Combine(appPath, guid));
+        logger?.Debug(string.Join("\n", lines));
         return string.Join("\n", lines);
       }
 
       public string ExecuteToJson()
       {
+        logger?.Info("Call Execute to Json");
         guid = Guid.NewGuid().ToString();
+        logger?.Info($"Generate Guid [{guid}]");
         string appPath = Config.CreateAppFolderIfNotExists(ApplicationName);
         string filePath = Path.Combine(appPath, guid);
+        logger?.Debug("PowerShell Command Call");
+        logger?.Debug(BuildCommand(PipeConvertToJsonCommand(),  PipeOutFileCommand(filePath)));
         process = Process.Start(GetProcessStartInfo(BuildCommand(PipeConvertToJsonCommand(),PipeOutFileCommand(filePath))));
         process.WaitForExit();
         process.Close();
 
         string[] lines = System.IO.File.ReadAllLines(Path.Combine(appPath, guid));
+        logger?.Debug(string.Join("\n", lines));
         return string.Join("\n", lines);
       }
 
-      public string BuildCommand() => stringBuilder.ToString().Trim();
+      public string BuildCommand() 
+      {
+        string command = stringBuilder.ToString().Trim();
+        if (!string.IsNullOrEmpty(RemoteServer))
+        {
+          command = "Invoke-Command -ComputerName {" + RemoteServer + "} -ScriptBlock {" + command + "}";
+        }
+        return command;
+      }
       public string BuildCommand(params string[] pipeCommand) => BuildCommand() + string.Join(" ", pipeCommand);
 
       public override string ToString() => BuildCommand();
+
+      public void SetLogger(ILogger logger)
+      {
+        this.logger = logger;
+      }
     }
 }
