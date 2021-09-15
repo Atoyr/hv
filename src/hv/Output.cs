@@ -22,7 +22,6 @@ namespace hv
   {
     public static Outputs GetOutputs(string value)
     {
-      Console.WriteLine(value);
       switch(value.ToLower())
       {
         case "json":

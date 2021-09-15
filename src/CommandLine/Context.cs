@@ -54,6 +54,5 @@ namespace Medoz.CommandLine
       if (GlobalFlagValues.ContainsKey(key)) return (bool)GlobalFlagValues[key];
       return false; // TODO Throw Exception
     }
-
   }
 }

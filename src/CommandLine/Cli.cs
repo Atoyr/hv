@@ -69,29 +69,41 @@ namespace Medoz.CommandLine
           if(command is null)
           {
             // Global Options
-            if (Flags.Any(x => x.Names().Any(x => x == optionName))) continue;
+            if (!Flags.Any(x => x.Names().Any(x => x == optionName))) continue;
             Flag flag = Flags.First(x => x.Names().Any(x => x == optionName));
             if (flag is BoolFlag)
             {
-              ctx.GlobalFlagValues[Name] = true;
+              ctx.GlobalFlagValues[flag.Name] = true;
             }
             else
             {
-              if (i + 1 < args.Length) ctx.GlobalFlagValues[Name] = args[i++];
+              if (i + 1 < args.Length) ctx.GlobalFlagValues[flag.Name] = args[++i];
             }
           }
           else
           {
             // Command Options
-            if (command.Flags.Any(x => x.Names().Any(x => x == optionName))) continue;
-            Flag flag = command.Flags.First(x => x.Names().Any(x => x == optionName));
-            if (flag is BoolFlag)
+            Flag flag;
+            if (command.Flags.Any(x => x.Names().Any(x => x == optionName)))
             {
-              ctx.FlagValues[Name] = true;
+               flag = command.Flags.First(x => x.Names().Any(x => x == optionName));
+            }
+            else if (Flags.Any(x => x.Names().Any(x => x == optionName)))
+            {
+              flag = Flags.First(x => x.Names().Any(x => x == optionName));
             }
             else
             {
-              if (i + 1 < args.Length) ctx.FlagValues[Name] = args[i++];
+              continue;
+            }
+
+            if (flag is BoolFlag)
+            {
+              ctx.FlagValues[flag.Name] = true;
+            }
+            else
+            {
+              if (i + 1 < args.Length) ctx.FlagValues[flag.Name] = args[++i];
             }
           }
         }
@@ -240,10 +252,10 @@ namespace Medoz.CommandLine
 
         sb.Append($"Global Options: \n");
 
-        int maxLength = Flags.Select(x => String.Join(", ", x.Names()).Length).Max();
+        int maxLength = Flags.Select(x => String.Join(", ", x.NamesAppendHyphen()).Length).Max();
         foreach(var flag in Flags)
         {
-          string n = String.Join(", ",flag.Names());
+          string n = String.Join(", ",flag.NamesAppendHyphen());
           sb.Append("\t").Append(n).Append(new string(' ',maxLength - n.Length + 1)).Append($" {flag.Usage}");
           if (flag.Value is not null)
           {

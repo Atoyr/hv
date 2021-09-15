@@ -25,13 +25,26 @@ namespace Medoz.CommandLine
     public string[] Names()
     {
       var names = new string[Alias.Length + 1];
-      names[0] = Name.Length == 1 ? "-" + Name : "--" + Name;
+      names[0] = Name;
       for(int i = 0; i < Alias.Length; i++)
       {
-        names[i+1] = Alias[i].Length == 1 ? "-" + Alias[i] : "--" + Alias[i];
+        names[i+1] = Alias[i];
       }
       return names;
     }
+
+    public string[] NamesAppendHyphen()
+    {
+      var names = new string[Alias.Length + 1];
+      names[0] = AddHyphen(Name);
+      for(int i = 0; i < Alias.Length; i++)
+      {
+        names[i+1] = AddHyphen(Alias[i]);
+      }
+      return names;
+    }
+
+    private string AddHyphen(string param) => param.Count() > 1 ? "--" + param : "-" + param;
   }
 
   public class Flag<T> : Flag

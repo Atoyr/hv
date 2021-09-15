@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text;
 
@@ -8,9 +9,12 @@ namespace hv
     public class PowerShellProcess : IDisposable
     {
       private static string PSPath = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+      private const string u0027 = "'";
 
       private StringBuilder stringBuilder;
-      private string guid { set; get; }
+      private string resultGuid { set; get; }
+      private string errorGuid { set; get; }
+      private string warningGuid { set; get; }
       private Process process { set; get; }
       private ILogger logger { set; get; }
 
@@ -28,7 +32,7 @@ namespace hv
       private PowerShellProcess(string value)
       {
         stringBuilder = new StringBuilder();
-        stringBuilder.Append(value);
+        stringBuilder.Append(value).Append(" ");
       }
 
       public void Dispose()
@@ -37,13 +41,31 @@ namespace hv
         {
           process.Dispose();
         }
-        if (!string.IsNullOrEmpty(guid))
+        if (!string.IsNullOrEmpty(resultGuid))
         {
           string appPath = Config.GetAppConfigFolderPath(ApplicationName);
-          if (!string.IsNullOrEmpty(appPath) && File.Exists(Path.Combine(appPath, guid)))
+          if (!string.IsNullOrEmpty(appPath) && File.Exists(Path.Combine(appPath, resultGuid)))
           {
-            File.Delete(Path.Combine(appPath, guid));
-            logger?.Info($"File deleted at {Path.Combine(appPath, guid)}");
+            File.Delete(Path.Combine(appPath, resultGuid));
+            logger?.Info($"File deleted at {Path.Combine(appPath, resultGuid)}");
+          }
+        }
+        if (!string.IsNullOrEmpty(errorGuid))
+        {
+          string appPath = Config.GetAppConfigFolderPath(ApplicationName);
+          if (!string.IsNullOrEmpty(appPath) && File.Exists(Path.Combine(appPath, errorGuid)))
+          {
+            File.Delete(Path.Combine(appPath, errorGuid));
+            logger?.Info($"File deleted at {Path.Combine(appPath, errorGuid)}");
+          }
+        }
+        if (!string.IsNullOrEmpty(warningGuid))
+        {
+          string appPath = Config.GetAppConfigFolderPath(ApplicationName);
+          if (!string.IsNullOrEmpty(appPath) && File.Exists(Path.Combine(appPath, warningGuid)))
+          {
+            File.Delete(Path.Combine(appPath, warningGuid));
+            logger?.Info($"File deleted at {Path.Combine(appPath, warningGuid)}");
           }
         }
       }
@@ -115,9 +137,18 @@ namespace hv
         return sb.ToString();
       }
 
-      private static string PipeOutFileCommand(string path)
+      private static string PipeOutResultFileCommand(string path)
       {
-        return $"| Out-File -FilePath {path}";
+        return $" 1> {path}";
+      }
+
+      private static string PipeOutErrorFileCommand(string path)
+      {
+        return $" 2> {path}";
+      }
+      private static string PipeOutWarninngFileCommand(string path)
+      {
+        return $" 3> {path}";
       }
 
       private static string PipeConvertToJsonCommand()
@@ -125,39 +156,71 @@ namespace hv
         return "| ConvertTo-Json";
       }
 
-      public string Execute()
+      public PowerShellResult Execute()
       {
         logger?.Info("Call Execute");
-        guid = Guid.NewGuid().ToString();
-        logger?.Info($"Generate Guid [{guid}]");
-        string appPath = Config.CreateAppFolderIfNotExists(ApplicationName);
-        string filePath = Path.Combine(appPath, guid);
-        logger?.Info(BuildCommand(PipeOutFileCommand(filePath)));
-        process = Process.Start(GetProcessStartInfo(BuildCommand(PipeOutFileCommand(filePath))));
-        process.WaitForExit();
-        process.Close();
-
-        string[] lines = System.IO.File.ReadAllLines(Path.Combine(appPath, guid));
-        logger?.Debug(string.Join("\n", lines));
-        return string.Join("\n", lines);
+        return execute();
       }
 
-      public string ExecuteToJson()
+      public PowerShellResult ExecuteToJson()
       {
         logger?.Info("Call Execute to Json");
-        guid = Guid.NewGuid().ToString();
-        logger?.Info($"Generate Guid [{guid}]");
+        return execute(PipeConvertToJsonCommand());
+      }
+
+      private PowerShellResult execute(params string[] options)
+      {
+        resultGuid = Guid.NewGuid().ToString();
+        errorGuid = Guid.NewGuid().ToString();
+        warningGuid = Guid.NewGuid().ToString();
+
+        logger?.Info($"Generate ResultGuid [{resultGuid}]");
+        logger?.Info($"Generate ErrorGuid [{errorGuid}]");
+        logger?.Info($"Generate WarningGuid [{warningGuid}]");
         string appPath = Config.CreateAppFolderIfNotExists(ApplicationName);
-        string filePath = Path.Combine(appPath, guid);
+        string resultFilePath = Path.Combine(appPath, resultGuid);
+        string errorFilePath = Path.Combine(appPath, errorGuid);
+        string warningFilePath = Path.Combine(appPath, warningGuid);
+        List<string> optionList = new List<string>();
+        foreach(var option in options)
+        {
+          optionList.Add(option);
+        }
+          
+        string command = BuildCommand(optionList.ToArray());
+
+        command += PipeOutResultFileCommand(resultFilePath);
+        command += PipeOutErrorFileCommand(errorFilePath);
+        command += PipeOutWarninngFileCommand(warningFilePath);
+
         logger?.Debug("PowerShell Command Call");
-        logger?.Debug(BuildCommand(PipeConvertToJsonCommand(),  PipeOutFileCommand(filePath)));
-        process = Process.Start(GetProcessStartInfo(BuildCommand(PipeConvertToJsonCommand(),PipeOutFileCommand(filePath))));
+        logger?.Debug(command);
+        process = Process.Start(GetProcessStartInfo(command));
         process.WaitForExit();
         process.Close();
 
-        string[] lines = System.IO.File.ReadAllLines(Path.Combine(appPath, guid));
-        logger?.Debug(string.Join("\n", lines));
-        return string.Join("\n", lines);
+        string[] resultLines = new string[0];
+        string[] errorLines = new string[0];
+        string[] warningLines = new string[0];
+
+        if (File.Exists(resultFilePath))
+        {
+          resultLines = System.IO.File.ReadAllLines(resultFilePath);
+          logger?.Debug(string.Join("\n", resultLines));
+        }
+
+        if (File.Exists(errorFilePath))
+        {
+          errorLines = System.IO.File.ReadAllLines(errorFilePath);
+          logger?.Debug(string.Join("\n", errorLines));
+        }
+
+        if (File.Exists(warningFilePath))
+        {
+          warningLines = System.IO.File.ReadAllLines(warningFilePath);
+          logger?.Debug(string.Join("\n", warningLines));
+        }
+        return new PowerShellResult(resultLines, errorLines, warningLines);
       }
 
       public string BuildCommand() 
@@ -165,11 +228,20 @@ namespace hv
         string command = stringBuilder.ToString().Trim();
         if (!string.IsNullOrEmpty(RemoteServer))
         {
-          command = "Invoke-Command -ComputerName {" + RemoteServer + "} -ScriptBlock {" + command + "}";
+          command = "Invoke-Command -ComputerName " + RemoteServer + " -Credential $cred -ScriptBlock {" + command + "}";
         }
         return command;
       }
-      public string BuildCommand(params string[] pipeCommand) => BuildCommand() + string.Join(" ", pipeCommand);
+
+      public string BuildCommand(params string[] pipeCommand)
+      {
+        string command = stringBuilder.ToString().Trim() + " " + string.Join(" ", pipeCommand);
+        if (!string.IsNullOrEmpty(RemoteServer))
+        {
+          command = "Invoke-Command -ComputerName " + RemoteServer + " -Credential $cred -ScriptBlock {" + command + "}";
+        }
+        return command;
+      }
 
       public override string ToString() => BuildCommand();
 
@@ -177,5 +249,57 @@ namespace hv
       {
         this.logger = logger;
       }
+    }
+
+    public class PowerShellResult
+    {
+        public string[] ResultLines;
+        public string[] ErrorLines;
+        public string[] WarningLines;
+
+        public PowerShellResult() {}
+
+        public PowerShellResult(string[] resultLines, string[] errorLines, string[] warningLines)
+        {
+          ResultLines = resultLines;
+          ErrorLines = errorLines;
+          WarningLines = warningLines;
+        }
+
+        public string Result()
+        {
+          if (ResultLines != null)
+          {
+            return string.Join("\n", ResultLines);
+          }
+          else
+          {
+            return string.Empty;
+          }
+        }
+
+        public string Error()
+        {
+          if (ErrorLines != null)
+          {
+            return string.Join("\n", ErrorLines);
+          }
+          else
+          {
+            return string.Empty;
+          }
+        }
+
+        public string Warning()
+        {
+          if (WarningLines != null)
+          {
+            return string.Join("\n", WarningLines);
+          }
+          else
+          {
+            return string.Empty;
+          }
+        }
     }
 }

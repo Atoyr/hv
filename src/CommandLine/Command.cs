@@ -100,10 +100,10 @@ namespace Medoz.CommandLine
         
         sb.Append($"OPTIONS: \n");
 
-        int maxLength = Flags.Select(x => String.Join(", ", x.Names()).Length).Max();
+        int maxLength = Flags.Select(x => String.Join(", ", x.NamesAppendHyphen()).Length).Max();
         foreach(var flag in Flags)
         {
-          string n = String.Join(", ",flag.Names());
+          string n = String.Join(", ",flag.NamesAppendHyphen());
           sb.Append("\t").Append(n).Append(new string(' ',maxLength - n.Length + 1)).Append($" {flag.Usage}");
           sb.Append($"\n");
         }
